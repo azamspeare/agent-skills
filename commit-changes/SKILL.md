@@ -1,41 +1,37 @@
 ---
 name: commit-changes
-description: Commits changes and pushes to repo. Creates or updates a PR on GitHub. After finishing your work, call this skill, or simply write "pls, commit", "commit this", "push my changes", or "create a PR". Always use this skill at the end of any coding task when the user wants to save or share their work.
+description: Commits changes, pushes to remote, and creates or updates a GitHub PR — using personal conventions. Invoke on "pls commit", "commit this", "push my changes", "create a PR", or at the end of a coding task.
 disable-model-invocation: true
 effort: medium
 ---
 
 # commit-changes
 
-Commit changes, push to remote, and create or update a GitHub PR — following the user's personal conventions.
+Commit, push, and open/update a GitHub PR following the user's conventions.
 
----
+## Tooling
 
-## Tool priority
+- **`git`** — all local operations: `status`, `diff`, `add`, `commit`, `push`, branches.
+- **`gh`** — GitHub-only operations: repo info, PR list/create/edit, `gh pr diff`.
 
-**Always prefer `gh` CLI over raw `git` commands** when `gh` can do the job (diff, status, PR management). Fall back to plain `git` only if `gh` is not installed or a specific operation isn't supported by `gh`.
+`gh` has no working-tree commands (no `gh diff`, no `gh status`). Don't try.
 
-Check availability once at the start:
-
+Check once at start:
 ```bash
-gh --version 2>/dev/null && echo "gh:available" || echo "gh:missing"
+gh --version >/dev/null 2>&1 && echo "gh:ok" || echo "gh:missing"
 ```
+If missing: still commit + push via `git`, skip the PR step, and tell the user to install from https://cli.github.com.
 
 ---
 
-## Step 1 — Detect the primary branch
+## Step 1 — Detect primary branch
 
 ```bash
-# With gh (preferred)
 gh repo view --json defaultBranchRef --jq '.defaultBranchRef.name'
-
-# Fallback
+# Fallback:
 git symbolic-ref refs/remotes/origin/HEAD | sed 's@^refs/remotes/origin/@@'
 ```
-
-Store this as `<primary>` (typically `main` or `master`). All PRs target this branch.
-
----
+Store as `<primary>`. All PRs target it.
 
 ## Step 2 — Check current branch
 
@@ -43,175 +39,129 @@ Store this as `<primary>` (typically `main` or `master`). All PRs target this br
 git branch --show-current
 ```
 
-**Protected / staging branches** (never commit directly to these):
-`main`, `master`, `dev`, `qa`, `testing`
-
-If the current branch **is not** a protected branch → proceed to Step 3.
-
-If the current branch **is** a protected branch → go to **§ Branch Redirect** below before continuing.
+Protected: `main`, `master`, `dev`, `qa`, `testing`.
+On a protected branch → **§ Branch Redirect**, then Step 3. Otherwise → Step 3.
 
 ---
 
-## § Branch Redirect (only when on a protected branch)
+## § Branch Redirect
 
-The user has made changes on a staging branch. Do not commit here. Instead:
+**Inspect the diff**, then pick a ticket ID and name.
 
-### Detect ticket ID (if any)
+### Ticket ID
 
-Search the conversation history and current session context for a Jira/Linear-style ticket ID — pattern: `[A-Z]+-\d+` (e.g. `AR-2000`, `SS-280`).
+Look for `[A-Z]+-\d+` in (1) the current branch name, (2) recent conversation. If neither, ask:
+> Is there a ticket ID for this work (e.g. `AR-2000`)? Press enter to skip.
 
-If found, all generated branch name options must be prefixed with that ticket ID:
-`AR-2000-<slug>`
+### Branch naming
 
-### Inspect the diff to understand the change
-
-```bash
-# With gh (preferred)
-gh diff
-
-# Fallback
-git diff
-```
-
-### Generate 3 branch name options
-
-Rules for branch names:
-
-- Format: `<type>/<slug>` or `<ticket-id>-<slug>` (with ticket prefix when available)
+- With ticket: `<ticket-id>-<slug>` → `AR-2000-employee-attribute-change`
+- Without ticket: `<type>/<slug>` → `feat/user-profile-avatar`
 - Types: `feat`, `fix`, `chore`, `docs`, `refactor`, `test`
-- Slug: **maximum 5 words**, hyphen-separated, lowercase
-- With ticket: `AR-2000-employee-attribute-change` (no type prefix needed)
-- Without ticket: `feat/user-profile-avatar-upload`
+- Slug: lowercase, hyphen-separated, **≤5 words**, describes the change.
 
-Generate 3 distinct, meaningful options based on what the diff actually does, then present them plus a free-text option:
+### Offer 3 suggestions derived from the diff
 
 ```
-I need to create a new branch for your changes (you're currently on a protected branch).
+You're on a protected branch. Let's move your changes to a new branch.
 
-Here are 3 suggestions based on your changes:
-  1. feat/short-description-here
-  2. fix/another-option-here
-  3. chore/third-option-here
-  4. Type your own branch name
+  1. feat/short-description
+  2. fix/another-option
+  3. chore/third-option
+  4. Type your own
 
-Which would you like? (1/2/3 or type your own)
+Which one? (1/2/3 or type your own)
 ```
 
-Wait for user input, then:
+### Create the branch from `<primary>` — not from the current HEAD
+
+Staging branches (`dev`, `qa`) usually contain commits not yet in `<primary>`. Branching from the current HEAD would sweep those into the PR diff. Branch from a fresh `<primary>` and carry the work across with a stash:
 
 ```bash
-git stash
-git checkout -b <chosen-branch>
+git fetch origin
+git stash --include-untracked
+git checkout -b <chosen-branch> origin/<primary>
 git stash pop
 ```
 
-Continue to Step 3.
+If `git stash pop` conflicts: stop and tell the user:
+> Local changes conflict with `<primary>`. Files: `<list>`. Resolve, run `git add <files>`, then re-invoke.
+
+Don't auto-resolve. The stash is preserved in `git stash list`.
 
 ---
 
-## Step 3 — Inspect changes
+## Step 3 — Inspect
 
 ```bash
-# With gh (preferred)
-gh diff --stat
-gh diff
-
-# Fallback
+git status
 git diff --stat
 git diff
 ```
+Nothing to commit → tell the user and stop.
 
-If there is nothing changed, tell the user and stop.
+## Step 4 — Stage only what the agent changed
 
----
+**Never `git add -A` or `git add .`** — they silently stage secrets, unrelated user work, and build artifacts.
 
-## Step 4 — Stage all changes
+1. From this session, list the files you actually edited.
+2. Intersect with `git status` — that's the staging set.
+3. If `git status` shows other modified/untracked files you didn't touch, list them and ask whether to include.
+4. If any path matches `*.env*` or contains `secret`/`credential`/`key`/`token`/`password`, ask before staging.
 
 ```bash
-git add -A
+git add <file1> <file2> ...
+git diff --cached --stat
 ```
 
----
+## Step 5 — Commit
 
-## Step 5 — Write the commit message
+Format: `<type>(<optional scope>): <summary>`
 
-Rules:
-
-- Format: `<type>(<optional scope>): <summary>`
-- **Summary must be maximum 6 words** — count strictly, no exceptions
 - Types: `feat`, `fix`, `chore`, `docs`, `style`, `test`, `ci`, `refactor`
-- Lowercase, no trailing period
+- Summary: prefer **≤6 words**, hard cap **10**. Lowercase, no trailing period. Describe the change, not the files.
 
-Good examples:
-
-- `feat(auth): add Google OAuth login` — 4 words ✓
-- `fix(api): handle null user response` — 4 words ✓
-- `chore: update dependencies` — 2 words ✓
-
-Bad (too long — reject and retry):
-
-- `feat(auth): add support for Google OAuth login flow` — 8 words ✗
+Examples: `feat(auth): add Google OAuth login` · `fix(api): handle null user response` · `chore: update dependencies`
 
 ```bash
 git commit -m "<type>(<scope>): <summary>"
 ```
 
----
+**If a pre-commit hook fails:** the commit did not happen. Fix the real issue (lint/format/types/tests), re-stage, retry. No `--no-verify` unless the user explicitly asks.
 
-## Step 6 — Push to remote
+## Step 6 — Push
 
 ```bash
 git push origin <current-branch>
 # If upstream not set:
 git push --set-upstream origin <current-branch>
 ```
-
----
+Push rejected → stop and show the message. **Never force-push** without explicit user instruction.
 
 ## Step 7 — Create or update the PR
 
-PRs always target `<primary>` (detected in Step 1).
-
-### Check if PR exists
+Target is always `<primary>`.
 
 ```bash
 gh pr list --head <current-branch> --json number,title,url
 ```
 
----
-
-### If no PR exists → Create it
-
+**No PR yet:**
 ```bash
-gh pr create \
-  --title "<PR title>" \
-  --body "<PR description>" \
-  --base <primary>
+gh pr create --title "<PR title>" --body "<PR description>" --base <primary>
 ```
 
-**PR title:** Expanded, human-readable version of the commit summary.
-
----
-
-### If PR already exists → Update the description
-
+**PR exists:** re-read the full branch diff (`gh pr diff <number>`) so the description reflects **all** changes on the branch, then:
 ```bash
-gh pr edit <number> --body "<updated PR description>"
+gh pr edit <number> --body "<updated description>"
 ```
 
-The updated description must reflect **all changes on this branch** — not just the latest commit. Re-inspect the full branch diff before writing:
-
-```bash
-gh pr diff
-# Fallback:
-git diff <primary>..HEAD
-```
+**PR title** — sentence case, no `type(scope):` prefix, no trailing period.
+Commit `feat(auth): add Google OAuth login` → PR title `Add Google OAuth login to the sign-in flow`.
 
 ---
 
-## PR Description format
-
-Always write the full PR description using this structure:
+## PR description format
 
 ```markdown
 ## Summary
@@ -222,24 +172,19 @@ Always write the full PR description using this structure:
 
 - <change 1>
 - <change 2>
-- <change 3 ...>
 
 ## Testing
 
-<How was this tested, or "N/A" for config/docs-only changes>
+<How this was tested, or "N/A" for config/docs-only changes>
 ```
 
-### ⚠️ Setup & Configuration section (conditional)
+### ⚙️ Setup & Configuration (append only if any apply)
 
-Include this section **only if** any of the following are true:
-
-- `.env`, `.env.example`, or any environment config file was modified
-- New environment variables were added or renamed
-- Infrastructure, server config, or deployment files changed
-- A migration must be run manually
-- Any manual step is required on the server/environment to make this change work
-
-If triggered, append at the end of the PR description:
+- `.env` / env config file changed
+- New env vars added or renamed
+- Infra / server / deployment files changed
+- Manual migration required
+- Any manual server/env step required
 
 ```markdown
 ## ⚙️ Setup & Configuration
@@ -256,38 +201,39 @@ If triggered, append at the end of the PR description:
 
 1. <Clear, numbered step>
 2. <Next step>
-3. ...
 
 ### Notes
 
-<Warnings, gotchas, or anything the reviewer/deployer needs to know>
+<Warnings, gotchas, anything the reviewer/deployer needs to know>
 ```
 
-Keep this section **simple, clean, and unambiguous** — written so that anyone on the team can follow it without asking questions.
+Keep it simple — anyone on the team should follow without asking.
 
 ---
 
-## Step 8 — Report to the user
-
-Print a clean summary:
+## Step 8 — Report
 
 ```
-✅ Committed:  feat(scope): short message here
-✅ Branch:     feat/my-feature-branch
-✅ Pushed to:  origin/feat/my-feature-branch
-✅ PR:         https://github.com/org/repo/pull/42  [created | updated]
+✅ Committed: feat(scope): short message here
+✅ Branch:    feat/my-feature-branch
+✅ Pushed:    origin/feat/my-feature-branch
+✅ PR:        https://github.com/org/repo/pull/42  [created | updated]
 ```
+Say explicitly if a step was skipped (e.g. `gh` missing → no PR).
 
 ---
 
 ## Error handling
 
-| Situation                                       | Action                                                                                                         |
-| ----------------------------------------------- | -------------------------------------------------------------------------------------------------------------- |
-| `gh` not installed                              | Fall back to `git` for all operations; skip PR creation; tell user to install `gh` from https://cli.github.com |
-| Not authenticated with `gh`                     | Tell user to run `gh auth login` and retry                                                                     |
-| Push rejected (conflicts)                       | Stop; tell user there are conflicts to resolve manually                                                        |
-| Detached HEAD                                   | Warn user and ask which branch to use                                                                          |
-| Nothing to commit after `git add -A`            | Tell user (possibly all files are in `.gitignore`)                                                             |
-| Can't detect primary branch                     | Ask user: "Is your primary branch `main` or `master`?"                                                         |
-| `git stash pop` conflicts after branch redirect | Warn user and list conflicting files                                                                           |
+| Situation                                        | Action                                                                 |
+| ------------------------------------------------ | ---------------------------------------------------------------------- |
+| `gh` not installed                               | Commit + push via `git`; skip PR; tell user to install `gh`            |
+| `gh` not authenticated                           | Tell user to run `gh auth login` and retry                             |
+| Primary branch undetectable                      | Ask: "Is it `main` or `master`?"                                       |
+| Nothing to commit                                | Tell user and stop                                                     |
+| Detached HEAD                                    | Warn user; ask which branch to use                                     |
+| Pre-commit hook failed                           | Fix underlying issue, re-stage, retry (never `--no-verify`)            |
+| Push rejected (non-fast-forward / conflicts)     | Stop; ask user to resolve; do not force-push                           |
+| Secret-looking file in staging set               | List it; ask before staging                                            |
+| Files modified that the agent did not touch      | List them; ask whether to include                                      |
+| `git stash pop` conflicts during branch redirect | Stop; list conflicting files; ask user to resolve, then re-invoke      |
