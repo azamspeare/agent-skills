@@ -17,8 +17,6 @@ npx skills add azamspeare/agent-skills --all
 npx skills add azamspeare/agent-skills --all -g
 ```
 
-> Replace `azamspeare/agent-skills` with your actual GitHub repo path.
-
 ---
 
 ## Skills
