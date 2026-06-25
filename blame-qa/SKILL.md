@@ -15,6 +15,17 @@ After you commit, write the QA test doc for you. It explains **what changed**, *
 
 ---
 
+## Step 0 — Write the whole doc super clear
+
+Everything you write in the document must be **simple, short, and crystal clear**. Even a child should understand it. The QA engineer should **never need to ask a question** — the doc answers everything.
+
+- If the **caveman** skill is available, use it for the whole document.
+- If not, still write plain: simple words, short lines, no jargon, no code terms. Spell out specifications in everyday language.
+
+Goal: the reader opens the file, knows exactly what to test and how, and never comes back to ask you anything.
+
+---
+
 ## Step 1 — Detect primary branch
 
 ```bash
@@ -185,6 +196,7 @@ Already-working features that this change might break. Re-test them.
 
 ## Rules
 
+- **Use the caveman skill for the whole doc if available;** otherwise write super simple, short, child-clear. The QA engineer should never need to ask a question.
 - **Write for a manual QA engineer who can't read code.** No code in the doc — no function names, file names, endpoint paths, language terms, or model/class names as code. Translate everything to what a user sees in the browser.
 - **Stay abstract.** "What changed" and "What to test" are one short line each. Detail lives only in the "How to test" tables.
 - Every "How to test" subsection reflects a "What to test" item, which reflects a "What changed" item. Keep them aligned.
