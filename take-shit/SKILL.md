@@ -1,11 +1,11 @@
 ---
-name: commit-changes
-description: Commits changes, pushes to remote, and creates or updates a GitHub PR — using personal conventions. Invoke on "pls commit", "commit this", "push my changes", "create a PR", or at the end of a coding task.
+name: take-shit
+description: Commits changes, pushes to remote, and creates or updates a GitHub PR — using personal conventions. Invoke on "/take-shit", "pls commit", "commit this", "push my changes", "create a PR", or at the end of a coding task.
 disable-model-invocation: true
 effort: medium
 ---
 
-# commit-changes
+# take-shit
 
 Commit, push, and open/update a GitHub PR following the user's conventions.
 
@@ -21,6 +21,22 @@ Check once at start:
 gh --version >/dev/null 2>&1 && echo "gh:ok" || echo "gh:missing"
 ```
 If missing: still commit + push via `git`, skip the PR step, and tell the user to install from https://cli.github.com.
+
+---
+
+## Step 0 — Did the user pass a branch name?
+
+The skill may be called with an argument:
+```
+/take-shit [branch name]
+```
+
+- **No argument** → normal flow. The skill suggests branch names when needed (see § Branch Redirect).
+- **Argument given** → the user already decided the name. **Do not suggest names.** Use theirs, but first **validate** it (see § Validate Given Branch Name). Store the validated result as `<given-branch>`.
+
+`<given-branch>` changes two things later:
+- On a protected branch → skip the suggestion menu; create `<given-branch>` directly.
+- On a valid feature branch → still create/switch to `<given-branch>` (the user asked for it explicitly), carrying changes over.
 
 ---
 
@@ -40,13 +56,43 @@ git branch --show-current
 ```
 
 Protected: `main`, `master`, `dev`, `qa`, `testing`.
-On a protected branch → **§ Branch Redirect**, then Step 3. Otherwise → Step 3.
+
+Pick the path:
+
+| Situation | Action |
+| --- | --- |
+| On a **protected** branch | **§ Branch Redirect**, then Step 3 |
+| On a **valid feature** branch **+ `<given-branch>`** | **§ Branch Redirect** (create/switch to `<given-branch>`), then Step 3 |
+| On a **valid feature** branch, no argument | Stay here → Step 3 |
+
+---
+
+## § Validate Given Branch Name
+
+Run only when the user passed `[branch name]`. Two layers:
+
+**Layer 1 — Git-valid?** (non-negotiable; git will reject otherwise)
+```bash
+git check-ref-format --branch "<name>" >/dev/null 2>&1 && echo "valid" || echo "invalid"
+```
+If **invalid** → don't create it. Show why (spaces, `..`, `~^:?*[`, leading/trailing `/` or `.`, etc.), offer a cleaned version (spaces→hyphens, strip illegal chars, lowercase), and ask:
+> `<name>` isn't a valid git branch name. Use `<cleaned>` instead? (y / type another)
+
+Re-validate whatever they choose.
+
+**Layer 2 — Matches conventions?** (see Branch naming below)
+If git-valid but it breaks conventions (no `<type>/` prefix or `<ticket>-` prefix, has uppercase, slug > 5 words) → **warn, don't block**. Suggest a fixed version and confirm:
+> `<name>` works but is off-convention. Suggested: `<fixed>`. Use `<fixed>`, keep `<name>`, or type another?
+
+Use exactly what the user confirms. Store as `<given-branch>`.
 
 ---
 
 ## § Branch Redirect
 
-**Inspect the diff**, then pick a ticket ID and name.
+**If `<given-branch>` is set, skip the ticket/naming/suggestion steps below — use `<given-branch>` and jump to "Create the branch".**
+
+Otherwise: **inspect the diff**, then pick a ticket ID and name.
 
 ### Ticket ID
 
@@ -75,14 +121,18 @@ Which one? (1/2/3 or type your own)
 
 ### Create the branch from `<primary>` — not from the current HEAD
 
+The branch to create is `<given-branch>` if the user passed one, otherwise the `<chosen-branch>` from the menu.
+
 Staging branches (`dev`, `qa`) usually contain commits not yet in `<primary>`. Branching from the current HEAD would sweep those into the PR diff. Branch from a fresh `<primary>` and carry the work across with a stash:
 
 ```bash
 git fetch origin
 git stash --include-untracked
-git checkout -b <chosen-branch> origin/<primary>
+git checkout -b <given-branch | chosen-branch> origin/<primary>
 git stash pop
 ```
+
+If `<given-branch>` already exists, `checkout -b` fails. Switch to it instead (`git checkout <given-branch>` after stashing) and tell the user it already existed.
 
 If `git stash pop` conflicts: stop and tell the user:
 > Local changes conflict with `<primary>`. Files: `<list>`. Resolve, run `git add <files>`, then re-invoke.
@@ -237,3 +287,6 @@ Say explicitly if a step was skipped (e.g. `gh` missing → no PR).
 | Secret-looking file in staging set               | List it; ask before staging                                            |
 | Files modified that the agent did not touch      | List them; ask whether to include                                      |
 | `git stash pop` conflicts during branch redirect | Stop; list conflicting files; ask user to resolve, then re-invoke      |
+| Given branch name invalid for git                | Show why; offer cleaned version; ask before creating (§ Validate)      |
+| Given branch name off-convention                 | Warn; suggest fixed version; use whatever the user confirms           |
+| Given branch already exists                       | Switch to it instead of `-b`; tell the user it already existed         |
