@@ -1,0 +1,8 @@
+# Ignore all dotfiles and dot-folders
+.*
+
+# But keep these tracked
+!.gitignore
+
+# macOS
+.DS_Store
