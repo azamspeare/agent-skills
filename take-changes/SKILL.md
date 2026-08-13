@@ -1,11 +1,11 @@
 ---
-name: take-shit
-description: Commits changes, pushes to remote, and creates or updates a GitHub PR — using personal conventions. Invoke on "/take-shit", "pls commit", "commit this", "push my changes", "create a PR", or at the end of a coding task.
+name: take-changes
+description: Commits changes, pushes to remote, and creates or updates a GitHub PR — using personal conventions. Invoke on "/take-changes", "pls commit", "commit this", "push my changes", "create a PR", or at the end of a coding task.
 disable-model-invocation: true
 effort: medium
 ---
 
-# take-shit
+# take-changes
 
 Commit, push, and open/update a GitHub PR following the user's conventions.
 
@@ -28,7 +28,7 @@ If missing: still commit + push via `git`, skip the PR step, and tell the user t
 
 The skill may be called with an argument:
 ```
-/take-shit [branch name]
+/take-changes [branch name]
 ```
 
 - **No argument** → normal flow. The skill suggests branch names when needed (see § Branch Redirect).
@@ -164,7 +164,49 @@ git add <file1> <file2> ...
 git diff --cached --stat
 ```
 
-## Step 5 — Commit
+## Step 5 — Comment sweep
+
+The user does **not** write comments that explain code. Before committing, sweep the **staged changes only** for them — never pre-existing lines.
+
+```bash
+git diff --cached
+```
+
+Look only at **added (`+`) lines**. Note `file:line` for every comment found (line numbers come from the hunk headers).
+
+**Flag — shitty, candidates for deletion:**
+- **Explanation comments** — describe what the code does: `// loop through users and update each`
+- **Guide comments** — narrate steps: `// step 1: fetch the data`, `// finally, save it`
+- **Section banners / restating the obvious**: `// helper functions`, `// constructor`
+
+**Keep — never flag:**
+- Docblocks & type declarations: PHPDoc/JSDoc `@param` / `@return` / `@var`, TS type comments
+- Linter / compiler / tool directives: `eslint-disable`, `@ts-expect-error`, `noqa`, `phpcs:ignore`, `prettier-ignore`, shebangs
+- `TODO` / `FIXME` / `HACK` markers
+- License / copyright headers
+- Commented-out code
+
+Unsure which side a comment falls on → **keep it**. Only flag clear explanation/guide comments.
+
+**Nothing flagged** → continue to Step 6.
+
+**Found some** → list them all, then ask **once** for the whole batch:
+
+```
+Found <n> explanation comments in your changes:
+
+  src/api/user.ts:42   // loop through the users and update each
+  src/api/user.ts:57   // step 2: build the response
+
+Delete them all and continue, or keep them? (delete / keep)
+```
+
+- **delete** → remove each flagged comment — the whole line if the comment stands alone, only the trailing comment if it sits after code. Re-stage the touched files, then continue.
+- **keep** → continue as-is.
+
+Either answer continues to commit + push. This check never blocks the flow.
+
+## Step 6 — Commit
 
 Format: `<type>(<optional scope>): <summary>`
 
@@ -179,7 +221,7 @@ git commit -m "<type>(<scope>): <summary>"
 
 **If a pre-commit hook fails:** the commit did not happen. Fix the real issue (lint/format/types/tests), re-stage, retry. No `--no-verify` unless the user explicitly asks.
 
-## Step 6 — Push
+## Step 7 — Push
 
 ```bash
 git push origin <current-branch>
@@ -188,7 +230,7 @@ git push --set-upstream origin <current-branch>
 ```
 Push rejected → stop and show the message. **Never force-push** without explicit user instruction.
 
-## Step 7 — Create or update the PR
+## Step 8 — Create or update the PR
 
 Target is always `<primary>`.
 
@@ -261,7 +303,7 @@ Keep it simple — anyone on the team should follow without asking.
 
 ---
 
-## Step 8 — Report
+## Step 9 — Report
 
 ```
 ✅ Committed: feat(scope): short message here
@@ -290,3 +332,4 @@ Say explicitly if a step was skipped (e.g. `gh` missing → no PR).
 | Given branch name invalid for git                | Show why; offer cleaned version; ask before creating (§ Validate)      |
 | Given branch name off-convention                 | Warn; suggest fixed version; use whatever the user confirms           |
 | Given branch already exists                       | Switch to it instead of `-b`; tell the user it already existed         |
+| Explanation comments in staged changes            | List them; ask once — delete or keep; continue either way (Step 5)     |

@@ -115,7 +115,7 @@ Write `docs/qa/{feature-name}-test-doc.md` (overwrite if it exists) using the te
    Regression:  <h> high · <m> med · <l> low  (or "none affected")
 ```
 
-Remind the user it's a new/changed file — commit it (e.g. with `/take-shit`) if they want it in the PR.
+Remind the user it's a new/changed file — commit it (e.g. with `/take-changes`) if they want it in the PR.
 
 ---
 
