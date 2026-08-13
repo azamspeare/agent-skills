@@ -17,6 +17,26 @@ npx skills add azamspeare/agent-skills --all
 npx skills add azamspeare/agent-skills --all -g
 ```
 
+## Remove
+
+```bash
+# Remove a skill from the current project
+npx skills remove blame-qa
+
+# Remove a globally installed skill
+npx skills remove blame-qa -g
+
+# Remove several at once
+npx skills remove take-changes ci-crashed -g
+```
+
+> **Note:** when a skill gets renamed in this repo, the old name stays installed on your machine — the installer treats the new name as a brand-new skill. Remove the old one, then re-install:
+>
+> ```bash
+> npx skills remove <old-name> -g
+> npx skills add azamspeare/agent-skills --all -g
+> ```
+
 ---
 
 ## Skills
