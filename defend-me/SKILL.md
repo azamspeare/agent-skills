@@ -1,6 +1,6 @@
 ---
 name: defend-me
-description: Audits PR review feedback or a GitHub issue against the actual repo. Fetches a PR review or an issue, breaks it into atomic items, verifies each claim against the real code, and reports each as Must have / Preferable / Invalid with a short reason. Report only — never edits code or posts replies. Invoke with "/defend-me <pr-review-url>", "/defend-me <issue-url>", "review this PR feedback", "audit these PR comments", "audit this issue", "is this review valid".
+description: Audits PR review feedback or a GitHub issue against the actual repo. Fetches a PR review or an issue, breaks it into atomic items, verifies each claim against the real code, and reports them grouped as Must Have / Nice to have / Not necessary with short reasons. Report only — never edits code or posts replies. Invoke with "/defend-me <pr-review-url>", "/defend-me <issue-url>", "review this PR feedback", "audit these PR comments", "audit this issue", "is this review valid".
 disable-model-invocation: true
 effort: max
 ---
@@ -105,40 +105,66 @@ Base every verdict on what you saw in the code — not on what the review or iss
 
 ## Step 4 — Categorize each item
 
-Put every item in exactly one bucket, with a status (valid / invalid) and a reason grounded in the code.
+Put every item in exactly one bucket, with a reason grounded in the code.
 
-| Category       | Meaning                                                                                  |
-| -------------- | ---------------------------------------------------------------------------------------- |
-| **Must have**  | Real problem. Should be fixed. Affects correctness, security, data, or the request flow. |
-| **Preferable** | Real but minor. Fine to skip — no real impact on the codebase or the request flow.       |
-| **Invalid**    | Not a real issue. Reviewer is wrong or over-engineered. Explain why it's wrong.          |
+| Category         | Marker | Meaning                                                                                  |
+| ---------------- | ------ | ---------------------------------------------------------------------------------------- |
+| **Must Have**    | 🟥     | Real problem. Should be fixed. Affects correctness, security, data, or the request flow. |
+| **Nice to have** | 🟨     | Real but minor. Fine to skip — no real impact on the codebase or the request flow.       |
+| **Not necessary**| 🟩     | Not a real issue. Reviewer is wrong or over-engineered. Explain why it's wrong.          |
 
 Rules:
-- Don't soften. If it's invalid, say invalid and why.
-- Don't inflate. Not every nitpick is "Must have".
-- Pre-existing issues this PR didn't introduce → usually **Preferable** or note them as out-of-scope, unless they're truly dangerous.
+- Don't soften. If it's not a real issue, say so and why.
+- Don't inflate. Not every nitpick is "Must Have".
+- Pre-existing issues this PR didn't introduce → usually **Nice to have** or note them as out-of-scope, unless they're truly dangerous.
 
 ---
 
 ## Step 5 — Output
 
-Print one block per item, in this exact shape. Keep every line short.
+Group the items under the three category headers, in this order: **🟥 Must Have → 🟨 Nice to have → 🟩 Not necessary**. Skip a header that has no items. Number items inside each category (`1)`, `2)`, …).
+
+Exact shape:
 
 ```
-<Issue Name> [<category> (<valid|invalid>)]
-- issue: <what reviewer claims, in one line>
-- root cause: <where it comes from in the code, one line>
-- reason: <why valid or invalid, based on the code>
-- fix: <how to fix, brief and abstract — not full detail>
+🟥 Must Have
+
+1) <short issue title>
+<explanation — what's wrong, where it comes from, and why the verdict.
+One flowing mini-paragraph, 1-3 short lines. NOT labeled sub-lines.>
+- - - - - - - - - - - - - -
+fix: <how to fix, brief and abstract — not full detail>
+note: <only if genuinely needed — otherwise omit this line>
+
+──────────────────────────
+
+2) <next issue title>
+...
+
+🟨 Nice to have
+
+1) ...
+
+🟩 Not necessary
+
+1) <short issue title>
+<explanation — same shape>
+- - - - - - - - - - - - - -
+why: <why it's not worth doing — over-engineered, no real impact, wrong claim>
+note: <only if needed>
 ```
 
-For **Invalid** items, the `fix` line is `none — not a real issue`.
-
-Order: **Must have** first, then **Preferable**, then **Invalid**.
+Format rules:
+- The explanation **merges** issue + root cause + reason into one short, plain caveman-style paragraph. Never split it into `issue:`/`root cause:`/`reason:` labeled lines — that's the old, hard-to-read shape.
+- Dashed line (`- - -`) separates explanation from the action lines inside an item.
+- Solid line (`───`) separates items inside the same category.
+- **Must Have** and **Nice to have** items get a `fix:` line. **Not necessary** items get a `why:` line instead — never a fix.
+- `note:` appears only when there is something extra worth saying (duplicate of another item, out-of-scope, pre-existing). No filler notes.
+- Every line short. A child could read the whole report and get it.
 
 End with a one-line tally:
 ```
-Total: X must-have · Y preferable · Z invalid
+Total: X must have · Y nice to have · Z not necessary
 ```
 
 That's it. No long summary after. The blocks are the whole report.
@@ -148,19 +174,24 @@ That's it. No long summary after. The blocks are the whole report.
 ## Example output (shape only)
 
 ```
-Missing failed() on queued listener [Preferable (valid)]
-- issue: listener has no failed() and ignores non-2xx install response
-- root cause: DesignerSignatureSetup copies legacy SignatureSetup, no error path
-- reason: valid but low impact — install retries elsewhere, no data loss
-- fix: add ->throw() on the response + a failed() handler
+🟨 Nice to have
 
-uniqid() not a CSPRNG [Invalid (invalid)]
-- issue: storage keys use uniqid() instead of secure random
-- root cause: key built from uniqid() on a public CDN path
-- reason: invalid — files are public-safe images, key secrecy buys nothing here
-- fix: none — not a real issue
+1) Queued listener has no failed()
+Listener ignores install errors — non-2xx response is swallowed, no failed()
+handler. Copied from legacy SignatureSetup. Real but small: install retries
+elsewhere, no data loss.
+- - - - - - - - - - - - - -
+fix: add ->throw() on the response + a failed() handler
 
-Total: 0 must-have · 1 preferable · 1 invalid
+🟩 Not necessary
+
+1) uniqid() not a CSPRNG
+Reviewer wants secure random for storage keys. Keys only name public-safe
+images on a public CDN path — key secrecy buys nothing here.
+- - - - - - - - - - - - - -
+why: no security value — files are already public
+
+Total: 0 must have · 1 nice to have · 1 not necessary
 ```
 
 ---

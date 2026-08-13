@@ -1,13 +1,13 @@
 ---
-name: puppy-pooped
-description: Fixes a failing CI / GitHub Actions job end to end. Pulls the failed run logs, finds the root cause, explains it in short plain terms, fixes the code like a senior engineer (security-aware), auto-commits and pushes, then watches the run until it passes — retrying itself while it keeps making progress. Stops and explains if the failure is not code-fixable. Invoke with "/puppy-pooped <action-run-url>", "tests failed <url>", "CI is red", "fix the failing job", "audit this action failure".
+name: ci-crashed
+description: Fixes a failing CI / GitHub Actions job end to end. Pulls the failed run logs, finds the root cause, explains it in short plain terms, fixes the code like a senior engineer (security-aware), auto-commits and pushes, then watches the run until it passes — retrying itself while it keeps making progress. Stops and explains if the failure is not code-fixable. Invoke with "/ci-crashed <action-run-url>", "tests failed <url>", "CI is red", "fix the failing job", "audit this action failure".
 disable-model-invocation: true
 effort: max
 ---
 
-# puppy-pooped
+# ci-crashed
 
-The puppy pooped in CI. Find the mess, explain it simply, clean it up, and don't leave until the floor is clean (the job is green).
+CI crashed. Find the mess, explain it simply, clean it up, and don't leave until the job is green.
 
 Full loop: **audit the failure → root cause → fix like a senior → commit + push → watch the run → if still red, go again.**
 
@@ -92,7 +92,7 @@ If **not code-fixable** → jump to § Stop and Explain.
 
 ## Step 6 — Commit + push (auto)
 
-Use the project's conventions (same spirit as the `take-shit` skill: never `git add .`, stage only what you changed, conventional commit, never force-push unless the user said so).
+Use the project's conventions (same spirit as the `take-changes` skill: never `git add .`, stage only what you changed, conventional commit, never force-push unless the user said so).
 
 ```bash
 git add <files you changed>
@@ -135,17 +135,31 @@ When you can't fix it (not code-fixable, or stuck with no new idea), don't keep 
 
 ## § Final Report
 
-When the run is green, drop this, short (caveman/brief):
+When the run is green, explain **what changed and how it works now** — one numbered block per change you made. Write it caveman-style (use the **caveman** skill if available): short, simple, a child could follow.
 
 ```
 ✅ CI is green.
 
-What was wrong: <plain root cause>
-How I fixed it: <plain, what changed and why>
-Attempts:       <n>
-Commits:        <list of fix commits>
-Run:            <url of the passing run>
+1) <change title>
+before: <what was broken and how it behaved — one plain line>
+after: <what changed and how it works now — one or two plain lines>
+
+──────────────────────────
+
+2) <next change title>
+before: <...>
+after: <...>
+
+Attempts: <n>
+Commits:  <list of fix commits>
+Run:      <url of the passing run>
 ```
+
+Rules for the blocks:
+- One block per real change. One change → one block. Don't pad, don't split one fix into fake blocks.
+- **before** = the problem as it was (the issue, in plain words).
+- **after** = what you changed and how it will behave now.
+- Separator line between blocks. No log dumps, no code walls — plain words only.
 
 ---
 
